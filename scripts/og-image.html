@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<!--
+  OGP画像 (og.png, 1200x630) の生成元。リポジトリ直下の og.png はこのページのスクリーンショット。
+  再生成: Chrome --headless --screenshot=og.png --window-size=1200,630 --hide-scrollbars scripts/og-image.html
+-->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<style>
+  html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background: radial-gradient(circle at 78% 45%, #23324a 0%, #1b1d20 62%);
+    color: #e9e9eb;
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
+    position: relative;
+  }
+  .text { position: absolute; left: 80px; top: 0; bottom: 0; width: 640px; display: flex; flex-direction: column; justify-content: center; }
+  .eyebrow { font-size: 22px; font-weight: 600; letter-spacing: .14em; color: #7ab7ff; margin: 0 0 18px; }
+  h1 { font-size: 76px; line-height: 1.05; font-weight: 800; margin: 0 0 28px; letter-spacing: -.01em; }
+  .lead { font-size: 28px; line-height: 1.6; color: #c6c8cc; margin: 0 0 36px; font-weight: 500; }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 40px; }
+  .chip { font-size: 21px; font-weight: 700; padding: 7px 16px; border-radius: 999px; background: #26282c; border: 1.5px solid #3d4046; }
+  .chip.c { border-color: #1e6fd0; color: #9cc8ff; }
+  .foot { font-size: 20px; color: #a2a5aa; display: flex; gap: 22px; align-items: center; }
+  .foot b { color: #ffb74d; font-weight: 600; }
+  svg { position: absolute; right: 0; top: 0; }
+</style>
+</head>
+<body>
+  <div class="text">
+    <p class="eyebrow">SPINE X-RAY MEASUREMENT</p>
+    <h1>Spine Analyzer<br>Tools</h1>
+    <p class="lead">脊椎X線画像のランドマークをクリックして<br>アライメント指標をその場で計測</p>
+    <div class="chips">
+      <span class="chip">PI</span><span class="chip">PT</span><span class="chip">SS</span><span class="chip">LL</span><span class="chip">SVA</span>
+      <span class="chip c">C2-C7</span><span class="chip c">T1S</span>
+    </div>
+    <div class="foot"><span>🔒 画像はブラウザ内だけで処理</span><b>Research use only</b></div>
+  </div>
+  <svg id="art" width="480" height="630" viewBox="720 0 480 630"></svg>
+
+<script>
+  // 矢状断の全脊椎模式図（前方=右）。頚椎前弯・胸椎後弯・腰椎前弯の中心線に沿って
+  // C2〜L5の椎体と棘突起を並べ、仙骨・大腿骨頭・SS角・C7鉛直線(SVA)を描く（デフォルメ）
+  const svg = document.getElementById('art');
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); svg.appendChild(e); return e; };
+  const add = (a, b, k = 1) => ({ x: a.x + b.x * k, y: a.y + b.y * k });
+  const pts = arr => arr.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+
+  const BLUE = '#7ab7ff', FILL = '#2c3a50', POST = '#5a82b8', ORANGE = '#ffb74d';
+  const SS = 40 * Math.PI / 180;
+  const uS = { x: -Math.sin(SS), y: Math.cos(SS) };   // 仙骨軸（後下方）
+  const nS = { x: Math.cos(SS), y: Math.sin(SS) };    // S1終板方向（前下方）
+
+  // 中心線: 下向きの進行方向が鉛直となす角θ(+=前方へ進む)を弧長に沿って補間し積分する。
+  // 頚椎前弯(C2→C7でθ減少)・胸椎後弯(T1→T12で増加)・腰椎前弯(L1→S1で減少、S1でθ=-SS)
+  const S1c = { x: 958, y: 452 }, LEN = 440;
+  const knots = [[0, 15], [0.17, -20], [0.68, 22], [1, -40]];
+  const theta = f => {
+    let i = 1; while (i < knots.length - 1 && knots[i][0] < f) i++;
+    const [f0, a0] = knots[i - 1], [f1, a1] = knots[i];
+    const k = (1 - Math.cos(Math.PI * Math.min(1, Math.max(0, (f - f0) / (f1 - f0))))) / 2;
+    return (a0 + (a1 - a0) * k) * Math.PI / 180;
+  };
+  const STEPS = 800, samples = [{ x: 0, y: 0 }];
+  for (let i = 0; i < STEPS; i++) {
+    const th = theta((i + 0.5) / STEPS), q = samples[i];
+    samples.push({ x: q.x + Math.sin(th) * LEN / STEPS, y: q.y + Math.cos(th) * LEN / STEPS });
+  }
+  const last = samples[STEPS];
+  for (const q of samples) { q.x += S1c.x - last.x; q.y += S1c.y - last.y; }
+  const cum = samples.map((_, i) => i * LEN / STEPS);
+  const total = LEN;
+  const at = s => {
+    let i = Math.min(STEPS, Math.max(1, Math.ceil(s / LEN * STEPS)));
+    const a = samples[i - 1], b = samples[i];
+    const L = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const k = (s - cum[i - 1]) / L;
+    const u = { x: (b.x - a.x) / L, y: (b.y - a.y) / L };   // 下向きの軸
+    return { p: { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k }, u, n: { x: u.y, y: -u.x } }; // n=前方
+  };
+
+  // 椎体の寸法（相対値）: [名前, 椎体高, 下の椎間板, 前後径, 棘突起の長さ, 棘突起の下向き角度]
+  const verts = [];
+  for (let i = 2; i <= 7; i++) verts.push(['C' + i, 1.0, 0.35, 1.25 + i * 0.03, i === 7 ? 1.05 : 0.6, 20]);
+  for (let i = 1; i <= 12; i++) verts.push(['T' + i, 1.15 + i * 0.04, 0.3, 1.55 + i * 0.05, 0.85, 55 - i * 2]);
+  for (let i = 1; i <= 5; i++) verts.push(['L' + i, 1.75 + i * 0.04, 0.5, 2.25 + i * 0.04, 0.75, 8]);
+  const unit = total / verts.reduce((s, v) => s + v[1] + v[2], 0);
+  const WIDEN = 1.4;   // 実寸比だと細長く見えるため前後径を太めにデフォルメ
+  const W_L5 = verts[verts.length - 1][3] * unit * WIDEN;
+
+  // 仙骨・尾骨（S1上終板から後下方へ。骨盤面は前方に凹、尾側は前方へ巻き込む）
+  const half = W_L5 / 2;
+  const s1a = add(S1c, nS, half), s1p = add(S1c, nS, -half);
+  const sp = (k, m) => add(add(S1c, uS, k * W_L5), nS, m * W_L5);
+  const tipS = sp(2.2, -0.05);
+  el('path', { d: `M ${s1p.x} ${s1p.y} L ${s1a.x} ${s1a.y}
+      Q ${sp(1.15, -0.1).x} ${sp(1.15, -0.1).y} ${tipS.x} ${tipS.y}
+      Q ${sp(1.3, -0.95).x} ${sp(1.3, -0.95).y} ${sp(0.3, -0.75).x} ${sp(0.3, -0.75).y} Z`,
+    fill: FILL, stroke: BLUE, 'stroke-width': 2, 'stroke-linejoin': 'round' });
+  for (let i = 0; i < 3; i++) {
+    const q = sp(2.35 + i * 0.2, 0.05 + i * 0.12);
+    el('ellipse', { cx: q.x, cy: q.y, rx: 6 - i, ry: 4.5 - i, fill: FILL, stroke: BLUE, 'stroke-width': 1.6 });
+  }
+
+  let s = 0, C7 = null;
+  for (const [name, h, gap, w, sp, spAng] of verts) {
+    const H = h * unit, W = w * unit * WIDEN;
+    const { p, u, n } = at(s + H / 2);
+    s += H + gap * unit;
+    const corner = (a, b) => add(add(p, n, a * W / 2), u, b * H / 2);
+    // 後方要素（椎弓根〜棘突起）
+    const base = add(p, n, -W / 2);
+    const lam = add(base, n, -W * 0.22);
+    const ang = spAng * Math.PI / 180;
+    const dir = { x: -n.x * Math.cos(ang) + u.x * Math.sin(ang), y: -n.y * Math.cos(ang) + u.y * Math.sin(ang) };
+    const tip = add(lam, dir, W * sp);
+    el('polyline', { points: pts([base, lam, tip]), fill: 'none', stroke: POST, 'stroke-width': Math.max(2.5, unit * 0.4),
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+    if (name === 'C2') {
+      // 歯突起とC1前弓
+      const dens = [corner(-0.45, -1), add(corner(-0.4, -1), u, -H * 0.9), add(corner(0.2, -1), u, -H * 0.9), corner(0.25, -1)];
+      el('polygon', { points: pts(dens), fill: FILL, stroke: BLUE, 'stroke-width': 2, 'stroke-linejoin': 'round' });
+      const c1 = add(add(p, n, W * 0.72), u, -H * 1.2);
+      el('ellipse', { cx: c1.x, cy: c1.y, rx: unit * 0.35, ry: unit * 0.5, fill: FILL, stroke: BLUE, 'stroke-width': 2 });
+    }
+    // 椎体（上下終板が軽く凹んだ箱）
+    const a = corner(1, -1), b = corner(1, 1), c = corner(-1, 1), d = corner(-1, -1);
+    const midTop = add(p, u, -H / 2 + H * 0.06), midBot = add(p, u, H / 2 - H * 0.06);
+    el('path', { d: `M ${d.x} ${d.y} Q ${midTop.x} ${midTop.y} ${a.x} ${a.y} L ${b.x} ${b.y} Q ${midBot.x} ${midBot.y} ${c.x} ${c.y} Z`,
+      fill: FILL, stroke: BLUE, 'stroke-width': 2, 'stroke-linejoin': 'round' });
+    if (name === 'C7') C7 = p;
+  }
+
+  // 大腿骨頭（S1中点の前下方。PT≈15°）
+  const PT = 15 * Math.PI / 180, dist = 3.3 * W_L5;
+  const fh = { x: S1c.x + Math.sin(PT) * dist, y: S1c.y + Math.cos(PT) * dist };
+  const r = 0.8 * W_L5;
+  el('circle', { cx: fh.x, cy: fh.y, r, fill: '#1b1d20', stroke: '#e9e9eb', 'stroke-width': 2.5, opacity: .9 });
+  el('path', { d: `M ${fh.x - 8} ${fh.y} H ${fh.x + 8} M ${fh.x} ${fh.y - 8} V ${fh.y + 8}`, stroke: '#e9e9eb', 'stroke-width': 2.5 });
+
+  // SS: S1終板の延長線と水平線
+  el('line', { x1: s1p.x - nS.x * 20, y1: s1p.y - nS.y * 20, x2: s1a.x + nS.x * 80, y2: s1a.y + nS.y * 80,
+    stroke: ORANGE, 'stroke-width': 3, 'stroke-dasharray': '9 7' });
+  el('line', { x1: s1p.x - 20, y1: s1p.y, x2: s1p.x + 150, y2: s1p.y, stroke: ORANGE, 'stroke-width': 3 });
+  const R = 105;
+  el('path', { d: `M ${s1p.x + R} ${s1p.y} A ${R} ${R} 0 0 1 ${s1p.x + R * nS.x} ${s1p.y + R * nS.y}`,
+    fill: 'none', stroke: ORANGE, 'stroke-width': 3 });
+  const t = el('text', { x: s1p.x + R + 10, y: s1p.y + 32, fill: ORANGE, 'font-size': 26, 'font-weight': 800 });
+  t.textContent = 'SS';
+
+  // SVA: C7中点からの鉛直線（S1後上縁との水平距離）
+  el('line', { x1: C7.x, y1: C7.y, x2: C7.x, y2: s1p.y, stroke: '#9cc8ff', 'stroke-width': 2.5, 'stroke-dasharray': '4 8', opacity: .9 });
+
+  for (const p of [C7, s1a, s1p]) el('circle', { cx: p.x, cy: p.y, r: 6.5, fill: '#1e6fd0', stroke: '#fff', 'stroke-width': 2.5 });
+</script>
+</body>
+</html>
