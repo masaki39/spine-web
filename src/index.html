@@ -29,42 +29,31 @@
       <div class="hero-text">
         <p class="eyebrow">SPINE X-RAY MEASUREMENT</p>
         <h1>脊椎アライメントを、<br><span class="grad">クリックで計測。</span></h1>
-        <p class="lead">X線画像にランドマークを置くだけで、脊椎骨盤パラメータや頚椎アライメントをその場で算出。インストール不要、画像は端末の外に出ません。</p>
-        <div class="hero-cta">
-          <a class="btn primary" href="#apps">ツールを選ぶ ↓</a>
-          <a class="btn ghost" href="https://github.com/masaki39/spine-web" target="_blank" rel="noopener">ソースを見る</a>
-        </div>
+        <p class="lead">X線画像にランドマークを置くと、計測値がその場で出ます。使うツールを選んでください。</p>
+
+        <nav class="apps" aria-label="ツール">
+          <a class="appcard" href="./apps/spinopelvic/">
+            <span class="card-body">
+              <span class="card-title">Spinopelvic Analyzer</span>
+              <span class="card-desc">大腿骨頭・S1・L1（任意で C7）から脊椎骨盤パラメータを算出</span>
+              <span class="chips"><span>PI</span><span>PT</span><span>SS</span><span>LL</span><span>SVA</span></span>
+            </span>
+            <span class="arrow" aria-hidden="true">→</span>
+          </a>
+          <a class="appcard" href="./apps/cervical/">
+            <span class="card-body">
+              <span class="card-title">Cervical Analyzer</span>
+              <span class="card-desc">C2・C7・T1 から頚椎アライメントパラメータを算出</span>
+              <span class="chips"><span>C2-C7 Cobb</span><span>T1 Slope</span><span>C2-C7 SVA</span></span>
+            </span>
+            <span class="arrow" aria-hidden="true">→</span>
+          </a>
+        </nav>
+
+        <p class="facts">画像はアップロードされず、ブラウザ内だけで処理されます。インストール不要で、HTML をダウンロードすればオフラインでも動作します。結果は CSV にまとめて保存できます。</p>
       </div>
       <div class="hero-art" aria-hidden="true">
         <img src="./spine.svg" alt="">
-      </div>
-    </section>
-
-    <ul class="features">
-      <li><span class="ficon">🔒</span><div><b>完全ローカル処理</b><span>画像はアップロードされず、ブラウザ内だけで計算</span></div></li>
-      <li><span class="ficon">⚡</span><div><b>インストール不要</b><span>ダウンロードしてダブルクリックでも動作</span></div></li>
-      <li><span class="ficon">📄</span><div><b>CSV 一括出力</b><span>複数画像を連続計測し、結果を1ファイルに保存</span></div></li>
-    </ul>
-
-    <section id="apps">
-      <h2 class="section-title">ツール</h2>
-      <div class="apps">
-        <a class="appcard" href="./apps/spinopelvic/">
-          <div class="card-head">
-            <h3>Spinopelvic Analyzer</h3>
-            <span class="arrow" aria-hidden="true">→</span>
-          </div>
-          <p>左右大腿骨頭・S1・L1（任意で C7）のランドマークから脊椎骨盤パラメータを算出します。</p>
-          <div class="chips"><span>PI</span><span>PT</span><span>SS</span><span>LL</span><span>SVA</span></div>
-        </a>
-        <a class="appcard" href="./apps/cervical/">
-          <div class="card-head">
-            <h3>Cervical Analyzer</h3>
-            <span class="arrow" aria-hidden="true">→</span>
-          </div>
-          <p>C2・C7・T1 のランドマークから頚椎アライメントパラメータを算出します。</p>
-          <div class="chips"><span>C2-C7 Cobb</span><span>T1 Slope</span><span>C2-C7 SVA</span></div>
-        </a>
       </div>
     </section>
   </main>
