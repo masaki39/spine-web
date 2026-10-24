@@ -14,6 +14,8 @@ export const state = {
   currentName: '',
   base: null,            // 元画像 (ImageBitmap)
   bitmap: null,          // 回転/反転適用後 (canvas)
+  aiBase: null,          // AI入力用の元画像（DICOMのみ。全階調を8bit化したもの。通常画像は null）
+  aiBitmap: null,        // aiBase に回転/反転を適用したもの
   imgW:0, imgH:0,
   rotation:0, flipH:false,
   points:{},             // id -> {x,y}
@@ -23,6 +25,7 @@ export const state = {
   active:null,
   placingC7:false,
   scale:{ p1:null, p2:null, realMm:null, pxPerMm:null, setting:0 },
+  dicomPxPerMm:null,      // DICOMのピクセル間隔タグ由来のスケール（通常画像は null）
   caseId:'',
   rows:[],
   rowByIndex:{},          // 画像index -> rows内の位置（同じ画像の重複記録を防ぐ）

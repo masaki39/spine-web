@@ -2,7 +2,7 @@ import { state, $, canvas, fileInput } from './state.js';
 import { G } from './geometry.js';
 import { fileStamp, csvEsc, download, deriveId } from './utils.js';
 import { render, fit, zoomAt, toScreen, toImg, measurementBlob } from './render.js';
-import { detectCervicalLandmarks } from './cervical-ai.js';
+import { isDicom, decodeDicom } from './dicom.js';
 
 // タッチ端末では文言を「タップ」「ボタン名」ベースにする（ホットキーが無いため）
 const TOUCH = matchMedia('(hover: none) and (pointer: coarse)').matches;
@@ -11,15 +11,18 @@ const TAP = TOUCH ? 'タップ' : 'クリック';
 //==================================================================
 // 画像読み込み・回転
 //==================================================================
-function setFiles(files){
-  const imgs=[...files].filter(f=>f.type.startsWith('image/'))
-                       .sort((a,b)=>a.name.localeCompare(b.name, undefined, {numeric:true}));
-  if(!imgs.length) return;
+async function setFiles(files){
+  // DICOMは拡張子なし（FILE1等）も多いので、画像MIME以外は中身を見て判定する
+  const kinds=await Promise.all([...files].map(async f=>
+    f.type.startsWith('image/') ? {file:f, dicom:false} : (await isDicom(f)) ? {file:f, dicom:true} : null));
+  const imgs=kinds.filter(Boolean)
+                  .sort((a,b)=>a.file.name.localeCompare(b.file.name, undefined, {numeric:true}));
+  if(!imgs.length){ setStatus('画像またはDICOMファイルが見つかりません', 4000); return; }
   const lose=[];
   if(state.rows.length && !state.csvSaved) lose.push(`未保存のCSV記録（${state.rows.length}件）`);
   if(hasUnsaved()) lose.push('配置中の点');
   if(lose.length && !confirm(`${lose.join('と')}が失われます。新しい画像を開きますか？`)) return;
-  state.images=imgs.map(f=>({file:f, name:f.name}));
+  state.images=imgs.map(({file,dicom})=>({file, name:file.name, dicom}));
   state.rows=[]; state.rowByIndex={}; state.csvSaved=false;   // 新しいバッチ＝記録をリセット
   loadImage(0);
 }
@@ -29,14 +32,23 @@ async function loadImage(i){
   if(i<0||i>=state.images.length) return;
   const token=++_loadToken;
   const it=state.images[i];
-  const base=await createImageBitmap(it.file);
+  let base, aiBase=null, dicomPxPerMm=null;
+  try{
+    if(it.dicom) ({ canvas:base, aiCanvas:aiBase, pxPerMm:dicomPxPerMm }=await decodeDicom(it.file));
+    else base=await createImageBitmap(it.file);
+  }catch(err){
+    console.error(err);
+    if(token===_loadToken) setStatus(`${it.name} を開けません: ${err.message}`, 8000);
+    return;
+  }
   if(token!==_loadToken) return;        // 連打で追い越された読み込みは破棄
-  state.index=i; state.currentName=it.name; state.base=base;
+  state.index=i; state.currentName=it.name; state.base=base; state.aiBase=aiBase; state.dicomPxPerMm=dicomPxPerMm;
   state.rotation=0; state.flipH=false;
   buildWorking();
   resetPoints();
   $('caseId').value = state.caseId = deriveId(it.name);
   fit(); updateUI(); render();
+  if(dicomPxPerMm) setStatus(`DICOMのピクセル間隔からスケールを自動設定（1mm = ${dicomPxPerMm.toFixed(2)}px）`, 5000);
 }
 
 function buildWorking(){
@@ -44,21 +56,26 @@ function buildWorking(){
   const swap=(r===90||r===270);
   const bw=state.base.width, bh=state.base.height;
   const w=swap?bh:bw, h=swap?bw:bh;
-  const c=document.createElement('canvas'); c.width=w; c.height=h;
-  const x=c.getContext('2d');
-  x.save();
-  x.translate(w/2,h/2);
-  x.rotate(r*Math.PI/180);
-  if(state.flipH) x.scale(-1,1);
-  x.drawImage(state.base, -bw/2, -bh/2);
-  x.restore();
-  state.bitmap=c; state.imgW=w; state.imgH=h;
+  const transformed=src=>{
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    const x=c.getContext('2d');
+    x.save();
+    x.translate(w/2,h/2);
+    x.rotate(r*Math.PI/180);
+    if(state.flipH) x.scale(-1,1);
+    x.drawImage(src, -bw/2, -bh/2);
+    x.restore();
+    return c;
+  };
+  state.bitmap=transformed(state.base); state.imgW=w; state.imgH=h;
+  state.aiBitmap=state.aiBase ? transformed(state.aiBase) : null;
 }
 
 function resetPoints(){
   state.points={}; state.placedOrder=[]; state.radius=60; state.radiusManual=false;
   state.active=null; state.placingC7=false; state.result=null; state.dirty=false;
-  state.scale={ p1:null, p2:null, realMm:null, pxPerMm:null, setting:0 };
+  // DICOMはピクセル間隔タグのスケールを初期値にする（手動校正すればそちらで上書き）
+  state.scale={ p1:null, p2:null, realMm:null, pxPerMm:state.dicomPxPerMm, setting:0 };
 }
 
 function rotate(deg){
@@ -379,12 +396,12 @@ function startScale(){
     state.scale.setting=0; state.scale.p1=null; state.scale.p2=null;
     recompute(); setStatus('スケール校正を中止しました', 3000); updateUI(); render(); return;
   }
-  state.scale={ p1:null,p2:null,realMm:null,pxPerMm:null, setting:1 };
+  state.scale={ p1:null,p2:null,realMm:null,pxPerMm:state.dicomPxPerMm, setting:1 };
   recompute(); setStatus(`スケール: 基準線の始点を${TAP}（もう一度押すと中止）`); updateUI(); render();
 }
 
-// AIモデルで頚椎8点を自動配置（オンライン版のみ。ローカル単体HTMLではモデルが
-// 同梱されないため fetch が失敗し、その場合はエラー表示のみで他機能には影響しない）
+// AIモデルでプリセットの計測点を自動配置（推論は preset.aiDetect。オンライン版のみ。ローカル単体HTMLでは
+// モデルが同梱されないため fetch が失敗し、その場合はエラー表示のみで他機能には影響しない）
 let aiBusy=false;
 async function autoDetect(){
   if(!state.bitmap || aiBusy) return;
@@ -394,9 +411,9 @@ async function autoDetect(){
   const prevLabel=label?.textContent;
   if(btn) btn.disabled=true;
   if(label) label.textContent='⏳ 解析中…';
-  setStatus('AIで頚椎8点を自動配置中…（初回はモデル読込のため時間がかかります）');
+  setStatus('AIで計測点を自動配置中…（初回はモデル読込のため時間がかかります）');
   try{
-    const detected=await detectCervicalLandmarks(state.bitmap, state.imgW, state.imgH);
+    const {points:detected, warnings}=await state.preset.aiDetect(state.aiBitmap||state.bitmap, state.imgW, state.imgH);
     state.placingC7=false;
     for(const [id,p] of Object.entries(detected)){
       if(!state.placedOrder.includes(id)) state.placedOrder.push(id);
@@ -404,7 +421,9 @@ async function autoDetect(){
     }
     state.active=null; state.dirty=true;
     recompute();
-    setStatus('AIで自動配置しました。点はドラッグ/矢印キーで微調整できます。', 6000);
+    setStatus(warnings.length
+      ? `AIで自動配置しました（要確認: ${warnings.join('、')}）。点はドラッグ/矢印キーで微調整できます。`
+      : 'AIで自動配置しました。点はドラッグ/矢印キーで微調整できます。', warnings.length?10000:6000);
   }catch(err){
     console.error(err);
     setStatus('自動計測は利用できません（オンライン版でのみ利用可能です）', 6000);

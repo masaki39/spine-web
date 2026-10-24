@@ -5,19 +5,19 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 
 const resolveSrc = p => fileURLToPath(new URL(p, import.meta.url));
 
-// cervical自動計測用のONNXモデル/onnxruntime-web WASM(計13MB超)は、
+// AI自動計測用のONNXモデル/onnxruntime-web WASM(計13MB超)は、
 // vite-plugin-singlefileのインライン化対象から外すため src/ の外
-// (リポジトリ直下 apps/cervical/model/) に単一のコミット済みファイルとして置く
+// (リポジトリ直下 apps/<app>/model/) に素のファイルとして置く
 // （本番配信そのままの場所なので、src/public 等への複製は作らない）。
-// devサーバーでも同じ相対パス /apps/cervical/model/* で読めるよう、ここでのみ配信する。
+// devサーバーでも同じ相対パス /apps/<app>/model/* で読めるよう、ここでのみ配信する。
 const MIME = { '.wasm': 'application/wasm', '.mjs': 'text/javascript', '.onnx': 'application/octet-stream' };
-const serveCervicalModel = () => ({
-  name: 'serve-cervical-model',
+const serveAiModel = () => ({
+  name: 'serve-ai-model',
   configureServer(server) {
     server.middlewares.use((req, res, next) => {
-      const m = req.url && req.url.match(/^\/apps\/cervical\/model\/([\w.-]+)$/);
+      const m = req.url && req.url.match(/^\/apps\/(cervical|spinopelvic)\/model\/([\w.-]+)$/);
       if (!m) return next();
-      const filePath = resolveSrc(`apps/cervical/model/${m[1]}`);
+      const filePath = resolveSrc(`apps/${m[1]}/model/${m[2]}`);
       if (!existsSync(filePath)) return next();
       res.setHeader('Content-Type', MIME[filePath.slice(filePath.lastIndexOf('.'))] || 'application/octet-stream');
       createReadStream(filePath).pipe(res);
@@ -41,7 +41,7 @@ const entry = PAGES[process.env.PAGE] || PAGES.home;
 export default defineConfig({
   root: 'src',
   base: './',          // file:// で直接開けるよう相対パスにする
-  plugins: [serveCervicalModel(), viteSingleFile()],
+  plugins: [serveAiModel(), viteSingleFile()],
   build: {
     // 出力先はエントリのrootからの相対パスを保つので、両ページとも同じoutDirでよい
     // (home: dist/index.html, spinopelvic: dist/spinopelvic/index.html)

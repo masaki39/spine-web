@@ -8,10 +8,14 @@
   "scripts": {
     "dev": "vite",
     "build": "rm -rf dist && PAGE=home vite build && PAGE=spinopelvic vite build && PAGE=cervical vite build && cp dist/index.html index.html && mkdir -p apps/spinopelvic apps/cervical && cp dist/apps/spinopelvic/index.html apps/spinopelvic/index.html && cp dist/apps/cervical/index.html apps/cervical/index.html",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "try-ai": "sh scripts/try-ai.sh"
   },
   "devDependencies": {
     "vite": "^6.0.0",
     "vite-plugin-singlefile": "^2.1.0"
+  },
+  "dependencies": {
+    "dicom-parser": "1.8.21"
   }
 }

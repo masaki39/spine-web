@@ -1,5 +1,7 @@
 import { G } from './geometry.js';
 import { timestamp } from './utils.js';
+import { detectCervicalLandmarks } from './cervical-ai.js';
+import { detectSpinopelvicLandmarks } from './wholespine-ai.js';
 
 //==================================================================
 // プリセット（汎用化の核：ランドマーク・計測・描画・CSVを内包）
@@ -50,7 +52,14 @@ export const SPINOPELVIC = {
   extras:[
     {id:'scale', label:'📏 スケール', cls:'orange', title:'基準線2点と実長でスケール校正 (S)'},
     {id:'c7',    label:'C7 / SVA',   cls:'teal',   title:'C7前/後縁を配置してSVAを計測 (C)'},
+    // AI自動計測（全脊椎2段階モデル）: 頚椎と同じく同意取得前データで学習したモデルのため、
+    // 手元での試用（pnpm try-ai）でのみ表示する。
+    ...(import.meta.env.VITE_AI
+      ? [{id:'aiDetect', label:'🤖 自動計測', cls:'ai', title:'全脊椎AIモデルで大腿骨頭・S1・L1・C7を自動配置（オンライン版のみ）'}]
+      : []),
   ],
+  // extras の aiDetect が呼ぶ推論。{points: id->{x,y}, warnings: string[]} を返す
+  aiDetect: detectSpinopelvicLandmarks,
   // 計測値は符号付き。前後ランドマーク(s1a/s1p, l1a/l1p)から「前方向」を導出するため、
   // 画像の左右反転に依存せず一貫した正負が得られる（絶対値による符号の喪失を解消）。
   compute(P, pxPerMm){
@@ -156,9 +165,13 @@ export const CERVICAL = {
     // AI自動計測: 現行モデルは同意取得(オプトアウト)前の患者データで学習したため無効化中。
     // 倫理委員会でオプトアウト取得済みのデータで再学習後、モデル一式(cervical_best.onnx /
     // cervical_best.onnx.data / onnxruntime-webのWASM一式)を apps/cervical/model/ に置き、
-    // 下の1行を有効化するだけで再度使えるようになる（推論ロジックは src/cervical-ai.js に実装済み）。
-    // {id:'aiDetect', label:'🤖 自動計測', cls:'ai', title:'AIモデルで頚椎8点を自動配置（オンライン版のみ）'},
+    // 下の条件を外すだけで再度使えるようになる（推論ロジックは src/cervical-ai.js に実装済み）。
+    // それまでは手元での試用（pnpm try-ai が VITE_AI=1 でビルド）でのみ表示する。
+    ...(import.meta.env.VITE_AI
+      ? [{id:'aiDetect', label:'🤖 自動計測', cls:'ai', title:'AIモデルで頚椎8点を自動配置（オンライン版のみ）'}]
+      : []),
   ],
+  aiDetect: async (bitmap, w, h) => ({ points: await detectCervicalLandmarks(bitmap, w, h), warnings: [] }),
   // C2下終板(c2a/c2p)から「前方向」を導出し、左右反転しても一貫した符号になるようにする
   // （SPINOPELVICのS1と同じ考え方）。C2C7_angle = incl(C2) - incl(C7下終板)（前弯=正）、
   // T1S = -incl(T1)（前方が下向き=正、標準的なT1 slopeの符号に合わせて反転）、

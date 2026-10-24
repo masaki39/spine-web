@@ -1,11 +1,7 @@
 // 頚椎8点の自動配置（spine-measure-assistで学習したONNXモデルを使用）。
-// モデル本体とonnxruntime-webのWASMランタイムは apps/cervical/model/ に
-// 素のファイルとして置いており、vite-plugin-singlefileのインライン化対象から
-// 意図的に外している（WASMが13MB超あり、単一HTMLダウンロード版に含めると
-// 配布物が肥大化するため）。そのためオンライン版（GitHub Pages）でのみ動作し、
-// ダウンロードした単体HTMLではfetchが404してこの機能だけ使えなくなる
-// （他の手動計測機能には影響しない）。
-const MODEL_DIR = './model/';
+// モデル・ランタイムの置き場所と読み込みは ort.js を参照。
+import { loadOrt, createSession } from './ort.js';
+
 const INPUT_SIZE = 512;
 
 // preset.js の CERVICAL.required と同順（学習側 LANDMARK_ORDER にも一致）
@@ -13,31 +9,15 @@ const LANDMARK_IDS = ['c2c', 'c2a', 'c2p', 'c7sp', 'c7ia', 'c7ip', 't1a', 't1p']
 
 let readyPromise = null;
 
-// 文字列prefixだと解決基準が呼び出し元によって変わる（import()はモジュール自身のURL基準、
-// fetch()はdocument基準）ため、常にdocument基準の絶対URLへ揃えてから使う。
-// cervical-ai.js自体はビルド後にindex.htmlへインライン化されるため import.meta.url は
-// 環境によって変わるが、document.baseURI＝ページのURLは開発/本番で一貫している。
-const abs = (name) => new URL(MODEL_DIR + name, document.baseURI).href;
-
-// onnxruntime-web本体とONNXモデルは初回のみロードし、以降は使い回す
+// ONNXモデルは初回のみロードし、以降は使い回す
 function getReady() {
   if (!readyPromise) {
     readyPromise = (async () => {
-      const ort = await import(/* @vite-ignore */ abs('ort.wasm.min.mjs'));
-      ort.env.wasm.wasmPaths = {
-        'ort-wasm-simd-threaded.wasm': abs('ort-wasm-simd-threaded.wasm'),
-        'ort-wasm-simd-threaded.mjs': abs('ort-wasm-simd-threaded.mjs'),
-      };
-      ort.env.wasm.numThreads = 1; // file://やCOOP/COEP未設定でも動くようにする
-      // 重みはonnx本体に埋め込まれておらず外部データファイルに分離されているため、
-      // 明示的にfetchしてバイト列を渡す（pathはグラフ内部の参照名と一致させる必要がある）
-      const extRes = await fetch(abs('cervical_best.onnx.data'));
-      const extData = new Uint8Array(await extRes.arrayBuffer());
-      const session = await ort.InferenceSession.create(abs('cervical_best.onnx'), {
-        externalData: [{ path: 'cervical_best.onnx.data', data: extData }],
-      });
+      const ort = await loadOrt();
+      const session = await createSession(ort, 'cervical_best.onnx', 'cervical_best.onnx.data');
       return { ort, session };
     })();
+    readyPromise.catch(() => { readyPromise = null; }); // 失敗時は次回押下で再試行できるようにする
   }
   return readyPromise;
 }
